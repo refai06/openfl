@@ -3,6 +3,7 @@
 
 
 """Experimental Aggregator module."""
+import asyncio
 import inspect
 import pickle
 import queue
@@ -148,8 +149,11 @@ class Aggregator:
         """
         return 10
 
-    def run_flow(self) -> None:
-        """Start the execution and run flow until transition."""
+    # Async version of run_flow()
+    async def run_flow(self) -> None:
+        """
+        Start the execution and run flow until transition.
+        """
         # Start function will be the first step if any flow
         f_name = "start"
 
@@ -192,7 +196,8 @@ class Aggregator:
                         + f"{self.collaborators_counter}/{len_sel_collabs}"
                         + " collaborators to send results..."
                     )
-                time.sleep(Aggregator._get_sleep_time())
+                # Use asyncio.sleep
+                await asyncio.sleep(Aggregator._get_sleep_time())
 
             self.collaborator_task_results.clear()
             f_name = self.next_step
