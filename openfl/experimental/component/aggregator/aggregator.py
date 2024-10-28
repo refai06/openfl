@@ -149,7 +149,6 @@ class Aggregator:
         """
         return 10
 
-    # Async version of run_flow()
     async def run_flow(self) -> None:
         """
         Start the execution and run flow until transition.
@@ -163,7 +162,6 @@ class Aggregator:
 
             if self.time_to_quit:
                 self.logger.info("Experiment Completed.")
-                self.quit_job_sent_to = self.authorized_cols
                 break
 
             # Prepare queue for collaborator task, with clones
@@ -196,7 +194,6 @@ class Aggregator:
                         + f"{self.collaborators_counter}/{len_sel_collabs}"
                         + " collaborators to send results..."
                     )
-                # Use asyncio.sleep
                 await asyncio.sleep(Aggregator._get_sleep_time())
 
             self.collaborator_task_results.clear()
@@ -264,6 +261,7 @@ class Aggregator:
                 self.logger.info(
                     f"Sending signal to collaborator {collaborator_name} to shutdown..."
                 )
+                self.quit_job_sent_to.append(collaborator_name)
                 # FIXME: 0, and "" instead of None is just for protobuf compatibility.
                 #  Cleaner solution?
                 return (

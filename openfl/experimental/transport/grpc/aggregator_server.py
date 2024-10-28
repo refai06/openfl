@@ -226,14 +226,13 @@ class AggregatorGRPCServer(aggregator_pb2_grpc.AggregatorServicer):
         self.server.start()
         self.is_server_started = True
         try:
-            while True:
-                if not self.aggregator.all_quit_jobs_sent():
-                    await asyncio.sleep(5)
-                else:
-                    print("All Jobs Sent Successfully, Exiting...")
-                    break
+            while not self.aggregator.all_quit_jobs_sent():
+                await asyncio.sleep(5)
         except KeyboardInterrupt:
             pass
+        finally:
+            print("All Jobs Sent Successfully, Exiting...")
+            self.stop_server()
 
     def run_server(self):
         """Launch the aggregator gRPC server and aggregator flow concurrently"""
