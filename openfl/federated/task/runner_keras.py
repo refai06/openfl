@@ -7,6 +7,7 @@ Base classes for developing a ke.Model() Federated Learning model.
 
 You may copy this file as the starting point of your own keras model.
 """
+
 from warnings import catch_warnings, simplefilter
 
 import numpy as np
@@ -193,7 +194,7 @@ class KerasTaskRunner(TaskRunner):
                     f"Param_metrics = {metrics}, model_metrics_names = {model_metrics_names}"
                 )
 
-        history = self.model.fit(batch_generator, verbose=1, **kwargs)
+        history = self.model.fit(batch_generator, verbose=2, **kwargs)
         results = []
         for metric in metrics:
             value = np.mean([history.history[metric]])
@@ -223,7 +224,7 @@ class KerasTaskRunner(TaskRunner):
         self.rebuild_model(round_num, input_tensor_dict, validation=True)
         param_metrics = kwargs["metrics"]
 
-        vals = self.model.evaluate(self.data_loader.get_valid_loader(batch_size), verbose=1)
+        vals = self.model.evaluate(self.data_loader.get_valid_loader(batch_size), verbose=2)
         model_metrics_names = self.model.metrics_names
         if type(vals) is not list:
             vals = [vals]
