@@ -209,6 +209,13 @@ class WorkspaceExport:
         return None, None
 
     def __extract_args_from_node(self, node: ast.Call) -> Dict[str, Any]:
+        """
+        Extracts positional arguments from an AST node representing a class instantiation.
+
+        Args:
+        node (ast.Call): The AST node representing the class instantiation.
+
+        """
         args = {}
         for arg in node.args:
             if isinstance(arg, ast.Name):
@@ -220,6 +227,13 @@ class WorkspaceExport:
         return args
 
     def __extract_kwargs_from_node(self, node: ast.Call) -> Dict[str, Any]:
+        """
+        Extracts keyword arguments from an AST node representing a class instantiation.
+
+        Args:
+        node (ast.Call): The AST node representing the class instantiation.
+
+        """
         kwargs = {}
         for kwarg in node.keywords:
             value = ast.unparse(kwarg.value).strip()
@@ -236,6 +250,13 @@ class WorkspaceExport:
         return kwargs
 
     def __extract_class_initializing_args(self, class_name: str) -> Dict[str, Any]:
+        """
+        Provided name of the class returns expected arguments and it's
+        values in form of dictionary.
+        Args:
+            class_name (str): Name of the class
+
+        """
         instantiation_args = {"args": {}, "kwargs": {}}
 
         with open(self.script_path, "r") as s:
@@ -504,7 +525,7 @@ class WorkspaceExport:
                             f"\nruntime_collaborators = "
                             f"{runtime_name}._LocalRuntime__collaborators"
                         )
-                        pass
+                        runtime_collab_created = True
                     f.write(
                         f"\n{collab_name}_private_attributes = "
                         f"runtime_collaborators['{collab_name}'].private_attributes"

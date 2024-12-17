@@ -70,7 +70,8 @@ def generate_artifacts(ctx, reserved_words=["next", "runtime", "input", "checkpo
 
 
 def validate_attributes(attrs, cls_attrs, f, attr_type):
-    """Validates that all attributes in the list are present in the class attributes."""
+    """Validates that all attributes in the list
+    are present in the class attributes."""
 
     if not isinstance(attrs, list):
         raise TypeError(f"'{attr_type}' should be a list")
@@ -88,12 +89,13 @@ def filter_attributes(ctx, f, **kwargs):
     Args:
         ctx (any): The context to filter attributes from.
         f (function): The next task function in the flow.
-        **kwargs: Optional arguments that specify the 'include' or 'exclude' lists.
+        **kwargs: Optional arguments that specify the 'include' or
+        'exclude' lists.
 
     Raises:
         RuntimeError: If both 'include' and 'exclude' are present,
-        or if an attribute in 'include' or 'exclude' is not found in the context's
-        attributes.
+        or if an attribute in 'include' or 'exclude' is not found in the
+        context's attributes.
     """
     _, cls_attrs = generate_artifacts(ctx=ctx)
     include = kwargs.get("include")
