@@ -208,53 +208,44 @@ class WorkspaceExport:
 
         return None, None
 
-    def __extract_class_initializing_args(self, class_name) -> Dict[str, Any]:  # noqa: C901
-        """Provided name of the class returns expected arguments and it's
-        values in form of dictionary.
+    def __extract_args_from_node(self, node: ast.Call) -> Dict[str, Any]:
+        args = {}
+        for arg in node.args:
+            if isinstance(arg, ast.Name):
+                args[arg.id] = arg.id
+            elif isinstance(arg, ast.Constant):
+                args[arg.s] = ast.unparse(arg)
+            else:
+                args[arg.arg] = ast.unparse(arg).strip()
+        return args
 
-        Args:
-            class_name (str): Name of the class
-        """
+    def __extract_kwargs_from_node(self, node: ast.Call) -> Dict[str, Any]:
+        kwargs = {}
+        for kwarg in node.keywords:
+            value = ast.unparse(kwarg.value).strip()
+            if value.startswith("(") and "," not in value:
+                value = value.lstrip("(").rstrip(")")
+            if value.startswith("[") and "," not in value:
+                value = value.lstrip("[").rstrip("]")
+            try:
+                value = ast.literal_eval(value)
+            except ValueError:
+                pass
+            kwargs[kwarg.arg] = value
+
+        return kwargs
+
+    def __extract_class_initializing_args(self, class_name: str) -> Dict[str, Any]:
         instantiation_args = {"args": {}, "kwargs": {}}
 
         with open(self.script_path, "r") as s:
             tree = ast.parse(s.read())
 
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    if node.func.id == class_name:
-                        # We found an instantiation of the class
-                        for arg in node.args:
-                            # Iterate through positional arguments
-                            if isinstance(arg, ast.Name):
-                                # Use the variable name as the argument value
-                                instantiation_args["args"][arg.id] = arg.id
-                            elif isinstance(arg, ast.Constant):
-                                instantiation_args["args"][arg.s] = ast.unparse(arg)
-                            else:
-                                instantiation_args["args"][arg.arg] = ast.unparse(arg).strip()
-
-                        for kwarg in node.keywords:
-                            # Iterate through keyword arguments
-                            value = ast.unparse(kwarg.value).strip()
-
-                            # If paranthese or brackets around the value is
-                            # found and it's not tuple or list remove
-                            # paranthese or brackets
-                            if value.startswith("(") and "," not in value:
-                                value = value.lstrip("(").rstrip(")")
-                            if value.startswith("[") and "," not in value:
-                                value = value.lstrip("[").rstrip("]")
-                            try:
-                                # Evaluate the value to convert it from a
-                                # string representation into its corresponding
-                                # python object.
-                                value = ast.literal_eval(value)
-                            except ValueError:
-                                # ValueError is ignored because we want the
-                                # value as a string
-                                pass
-                            instantiation_args["kwargs"][kwarg.arg] = value
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == class_name:
+                    instantiation_args["args"] = self.__extract_args_from_node(node)
+                    instantiation_args["kwargs"] = self.__extract_kwargs_from_node(node)
 
         return instantiation_args
 
@@ -400,20 +391,12 @@ class WorkspaceExport:
 
         self.__write_yaml(plan, data)
 
-    def generate_data_yaml(self) -> None:  # noqa: C901
-        """Generates data.yaml."""
-        # Import python script if not already
-        if not hasattr(self, "exported_script_module"):
-            self.__import_exported_script()
-
-        # If flow classname is not yet found
-        if not hasattr(self, "flow_class_name"):
-            flspec = importlib.import_module("openfl.experimental.workflow.interface").FLSpec
-            _, self.flow_class_name = self.__get_class_name_and_sourcecode_from_parent_class(flspec)
-
-        # Import flow class
+    def _get_runtime_info(self):
+        """
+        Find the federated flow class and runtime
+        """
         federated_flow_class = getattr(self.exported_script_module, self.flow_class_name)
-        # Find federated_flow._runtime and federated_flow._runtime.collaborators
+
         for t in self.available_modules_in_exported_script:
             tempstring = t
             t = getattr(self.exported_script_module, t)
@@ -424,17 +407,42 @@ class WorkspaceExport:
                 runtime = t._runtime
                 if not hasattr(runtime, "collaborators"):
                     raise AttributeError("LocalRuntime instance does not have collaborators")
-                break
 
-        data_yaml = self.created_workspace_path.joinpath("plan", "data.yaml").resolve()
-        data = self.__read_yaml(data_yaml)
-        if data is None:
-            data = {}
+                return runtime, flow_name
 
-        # Find aggregator details
+        raise ValueError("Could not find runtime details")
+
+    def _handle_collaborator_callable(self, collab_name, runtime, data):
+        """Hanlde collaborator with callable function."""
+
+        #  Find arguments expected by Collaborator
+        arguments_passed_to_initialize = self.__extract_class_initializing_args("Collaborator")[
+            "kwargs"
+        ]
+
+        if collab_name not in data:
+            data[collab_name] = {"callable_func": {"settings": {}, "template": None}}
+
+        kw_args = runtime.get_collaborator_kwargs(collab_name)
+        for key, value in kw_args.items():
+            if key == "private_attributes_callable":
+                value = f"src.{self.script_name}.{value}"
+                data[collab_name]["callable_func"]["template"] = value
+            elif isinstance(value, (int, str, bool)):
+                data[collab_name]["callable_func"]["settings"][key] = value
+            else:
+                arg = arguments_passed_to_initialize[key]
+                value = f"src.{self.script_name}.{arg}"
+                data[collab_name]["callable_func"]["settings"][key] = value
+
+        return data
+
+    def _prepare_aggregator_data(self, runtime, data, flow_name):
+        """
+        Prepare aggregator details for data.yaml
+        """
         aggregator = runtime._aggregator
         runtime_name = "runtime_local"
-        runtime_created = False
         private_attrs_callable = aggregator.private_attributes_callable
         aggregator_private_attributes = aggregator.private_attributes
 
@@ -445,7 +453,6 @@ class WorkspaceExport:
                     "template": f"src.{self.script_name}.{private_attrs_callable.__name__}",
                 }
             }
-            # Find arguments expected by Aggregator
             arguments_passed_to_initialize = self.__extract_class_initializing_args("Aggregator")[
                 "kwargs"
             ]
@@ -458,7 +465,6 @@ class WorkspaceExport:
                     value = f"src.{self.script_name}.{arg}"
                     data["aggregator"]["callable_func"]["settings"][key] = value
         elif aggregator_private_attributes:
-            runtime_created = True
             with open(self.script_path, "a") as f:
                 f.write(f"\n{runtime_name} = {flow_name}._runtime\n")
                 f.write(
@@ -469,33 +475,25 @@ class WorkspaceExport:
                 "private_attributes": f"src.{self.script_name}.aggregator_private_attributes"
             }
 
+        return data
+
+    def _prepare_collaborator_data(self, runtime, data, flow_name):
+        """Prepares collaborator details for data.yaml"""
+
         # Get runtime collaborators
         collaborators = runtime._LocalRuntime__collaborators
-        # Find arguments expected by Collaborator
-        arguments_passed_to_initialize = self.__extract_class_initializing_args("Collaborator")[
-            "kwargs"
-        ]
+        runtime_name = "runtime_local"
+        runtime_created = False
         runtime_collab_created = False
+
         for collab in collaborators.values():
             collab_name = collab.get_name()
             callable_func = collab.private_attributes_callable
             private_attributes = collab.private_attributes
 
             if callable_func:
-                if collab_name not in data:
-                    data[collab_name] = {"callable_func": {"settings": {}, "template": None}}
-                # Find collaborator private_attributes callable details
-                kw_args = runtime.get_collaborator_kwargs(collab_name)
-                for key, value in kw_args.items():
-                    if key == "private_attributes_callable":
-                        value = f"src.{self.script_name}.{value}"
-                        data[collab_name]["callable_func"]["template"] = value
-                    elif isinstance(value, (int, str, bool)):
-                        data[collab_name]["callable_func"]["settings"][key] = value
-                    else:
-                        arg = arguments_passed_to_initialize[key]
-                        value = f"src.{self.script_name}.{arg}"
-                        data[collab_name]["callable_func"]["settings"][key] = value
+                data = self._handle_collaborator_callable(collab_name, runtime, data)
+
             elif private_attributes:
                 with open(self.script_path, "a") as f:
                     if not runtime_created:
@@ -506,14 +504,47 @@ class WorkspaceExport:
                             f"\nruntime_collaborators = "
                             f"{runtime_name}._LocalRuntime__collaborators"
                         )
-                        runtime_collab_created = True
+                        pass
                     f.write(
                         f"\n{collab_name}_private_attributes = "
                         f"runtime_collaborators['{collab_name}'].private_attributes"
                     )
+
                 data[collab_name] = {
                     "private_attributes": f"src."
                     f"{self.script_name}.{collab_name}_private_attributes"
                 }
 
-        self.__write_yaml(data_yaml, data)
+        return data
+
+    def generate_data_yaml(self):
+        """Generates data.yaml."""
+
+        # Import python script if not already
+        if not hasattr(self, "exported_script_module"):
+            self.__import_exported_script()
+
+        # If flow classname is not yet found
+        if not hasattr(self, "flow_class_name"):
+            flspec = importlib.import_module("openfl.experimental.workflow.interface").FLSpec
+            _, self.flow_class_name = self.__get_class_name_and_sourcecode_from_parent_class(flspec)
+
+        # Import flow class
+        getattr(self.exported_script_module, self.flow_class_name)
+        # #Find federated_flow._runtime and federated_flow._runtime.collaborators
+
+        runtime, flow_name = self._get_runtime_info()
+
+        data_yaml = self.created_workspace_path.joinpath("plan", "data.yaml").resolve()
+        data = self.__read_yaml(data_yaml)
+
+        data = data if data is not None else {}
+
+        # Process aggregator details
+        data = self._prepare_aggregator_data(runtime, data, flow_name)
+
+        # Process collaborator details
+        data = self._prepare_collaborator_data(runtime, data, flow_name)
+
+        # Write the updated data
+        self._write_yaml(data_yaml, data)
