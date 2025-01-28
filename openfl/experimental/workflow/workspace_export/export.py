@@ -582,4 +582,4 @@ class WorkspaceExport:
         data = self._prepare_collaborator_data(runtime, data, flow_name)
 
         # Write the updated data
-        self._write_yaml(data_yaml, data)
+        self.__write_yaml(data_yaml, data)
