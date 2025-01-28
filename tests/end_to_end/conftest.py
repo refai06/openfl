@@ -7,11 +7,12 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 import logging
-
+from pathlib import Path
 
 from tests.end_to_end.utils.logger import configure_logging
 from tests.end_to_end.utils.logger import logger as log
 from tests.end_to_end.utils.conftest_helper import parse_arguments
+import tests.end_to_end.utils.docker_helper as dh
 
 
 def pytest_addoption(parser):
@@ -60,7 +61,7 @@ def setup_logging(pytestconfig):
     tmp_results_dir = pytestconfig.getini("results_dir")
     log_level = pytestconfig.getini("log_level")
 
-    results_dir = os.path.join(os.getenv("HOME"), tmp_results_dir)
+    results_dir = os.path.join(Path().home(), tmp_results_dir)
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
@@ -191,6 +192,11 @@ def pytest_sessionfinish(session, exitstatus):
     if os.path.exists(cache_dir):
         shutil.rmtree(cache_dir, ignore_errors=False)
         log.debug(f"Cleared .pytest_cache directory at {cache_dir}")
+
+    # Cleanup docker containers related to aggregator and collaborators, if any.
+    dh.cleanup_docker_containers(list_of_containers=["aggregator", "collaborator*"])
+    # Cleanup docker network created for openfl, if any.
+    dh.remove_docker_network(["openfl"])
 
 
 def pytest_configure(config):

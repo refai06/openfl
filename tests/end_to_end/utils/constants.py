@@ -13,6 +13,7 @@ class ModelName(Enum):
     TORCH_CNN_MNIST = "torch_cnn_mnist"
     KERAS_CNN_MNIST = "keras_cnn_mnist"
     TORCH_CNN_HISTOLOGY = "torch_cnn_histology"
+    XGB_HIGGS = "xgb_higgs"
 
 NUM_COLLABORATORS = 2
 NUM_ROUNDS = 5
@@ -25,3 +26,20 @@ CREATE_OPENFL_NW = "docker network create"
 REMOVE_OPENFL_NW = "docker network rm"
 DOCKER_NETWORK_NAME = "openfl"
 DEFAULT_OPENFL_IMAGE = "openfl:latest"
+
+AGG_WORKSPACE_PATH = "{}/aggregator/workspace" # example - /tmp/my_federation/aggregator/workspace
+COL_WORKSPACE_PATH = "{}/{}/workspace"  # example - /tmp/my_federation/collaborator1/workspace
+AGG_PLAN_PATH = "{}/aggregator/workspace/plan"  # example - /tmp/my_federation/aggregator/workspace/plan
+COL_PLAN_PATH = "{}/{}/workspace/plan"  # example - /tmp/my_federation/collaborator1/workspace/plan
+
+COL_DATA_FILE = "{}/{}/workspace/plan/data.yaml"  # example - /tmp/my_federation/collaborator1/workspace/plan/data.yaml
+
+DATA_SETUP_FILE = "setup_data.py" # currently xgb_higgs is using this file to setup data
+
+AGG_COL_RESULT_FILE = "{0}/{1}/workspace/{1}.log"  # example - /tmp/my_federation/aggregator/workspace/aggregator.log
+
+AGG_WORKSPACE_ZIP_NAME = "workspace.zip"
+
+# Memory logs related
+AGG_MEM_USAGE_JSON = "{}/aggregator/workspace/logs/aggregator_memory_usage.json"  # example - /tmp/my_federation/aggregator/workspace/logs/aggregator_memory_usage.json
+COL_MEM_USAGE_JSON = "{0}/{1}/workspace/logs/{1}_memory_usage.json"  # example - /tmp/my_federation/collaborator1/workspace/logs/collaborator1_memory_usage.json

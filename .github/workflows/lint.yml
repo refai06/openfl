@@ -4,9 +4,8 @@
 name: Check code format
 
 on:
-  pull_request:
-    branches: [ develop ]
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,10 +21,10 @@ jobs:
     - name: Set up Python 3
       uses: actions/setup-python@v3
       with:
-        python-version: "3.9"
+        python-version: "3.10"
     - name: Install linters
       run: |
         python -m pip install --upgrade pip
-        pip install -r linters-requirements.txt 
+        pip install -r linters-requirements.txt
     - name: Lint with OpenFL-specific rules
       run: bash scripts/lint.sh

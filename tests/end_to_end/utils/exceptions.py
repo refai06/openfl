@@ -56,3 +56,38 @@ class WorkspaceImportException(Exception):
 class CollaboratorCreationException(Exception):
     """Exception for aggregator creation"""
     pass
+
+
+class WorkspaceDockerizationException(Exception):
+    """Exception for workspace dockerization"""
+    pass
+
+
+class WorkspaceLoadException(Exception):
+    """Exception for workspace load"""
+    pass
+
+
+class ReferenceFlowException(Exception):
+    """Exception for reference flow"""
+    pass
+
+
+class NotebookRunException(Exception):
+    """Exception for notebook run"""
+    pass
+
+
+class EnvoyStartException(Exception):
+    """Exception for envoy start"""
+    pass
+
+
+class DirectorStartException(Exception):
+    """Exception for director start"""
+    pass
+
+
+class DataSetupException(Exception):
+    """Exception for data setup for given model"""
+    pass

@@ -1,4 +1,5 @@
 template : openfl.component.Aggregator
 settings :
     db_store_rounds : 2
-    write_logs      : true
+    persist_checkpoint: True
+    persistent_db_path: local_state/tensor.db
