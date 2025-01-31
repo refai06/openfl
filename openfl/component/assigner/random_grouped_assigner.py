@@ -6,7 +6,7 @@
 
 import numpy as np
 
-from openfl.component.assigner.assigner import Assigner
+from openfl.component.assigner import Assigner
 
 
 class RandomGroupedAssigner(Assigner):
@@ -33,16 +33,19 @@ class RandomGroupedAssigner(Assigner):
         \* - Plan setting.
     """
 
+    with_selected_task_group = Assigner.with_selected_task_group
+
     def __init__(self, task_groups, **kwargs):
         """Initializes the RandomGroupedAssigner.
 
         Args:
             task_groups (list of object): Task groups to assign.
-            **kwargs: Additional keyword arguments.
+            **kwargs: Additional keyword arguments, including mode.
         """
         self.task_groups = task_groups
         super().__init__(**kwargs)
 
+    @with_selected_task_group
     def define_task_assignments(self):
         """Define task assignments for each round and collaborator.
 
@@ -56,9 +59,9 @@ class RandomGroupedAssigner(Assigner):
         Returns:
             None
         """
-        assert (
-            np.abs(1.0 - np.sum([group["percentage"] for group in self.task_groups])) < 0.01
-        ), "Task group percentages must sum to 100%"
+        assert np.abs(1.0 - np.sum([group["percentage"] for group in self.task_groups])) < 0.01, (
+            "Task group percentages must sum to 100%"
+        )
 
         # Start by finding all of the tasks in all specified groups
         self.all_tasks_in_groups = list(

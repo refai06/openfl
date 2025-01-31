@@ -10,16 +10,8 @@ aggregator:
     rounds_to_train: 2
     write_logs: false
   template: openfl.component.aggregator.Aggregator
-assigner:
-  settings:
-    task_groups:
-    - name: train_and_validate
-      percentage: 1.0
-      tasks:
-      - aggregated_model_validation
-      - train
-      - locally_tuned_model_validation
-  template: openfl.component.RandomGroupedAssigner
+assigner :
+  defaults : plan/defaults/assigner.yaml
 collaborator:
   settings:
     db_store_rounds: 1
@@ -34,8 +26,8 @@ data_loader:
     batch_size: 64
     collaborator_count: 2
   template: src.dataloader.PyTorchMNISTInMemory
-network :
-  defaults : plan/defaults/network.yaml
+network:
+  defaults: plan/defaults/network.yaml
 task_runner:
   settings: {}
   template: src.taskrunner.TemplateTaskRunner

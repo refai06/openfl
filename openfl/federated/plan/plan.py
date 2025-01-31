@@ -4,6 +4,7 @@
 
 """Plan module."""
 
+from functools import partial
 from hashlib import sha384
 from importlib import import_module
 from logging import getLogger
@@ -43,7 +44,7 @@ class Plan:
         server_ (AggregatorGRPCServer): gRPC server object.
         client_ (AggregatorGRPCClient): gRPC client object.
         pipe_ (CompressionPipeline): Compression pipeline object.
-        straggler_policy_ (StragglerHandlingPolicy): Straggler handling policy.
+        straggler_policy_ (StragglerPolicy): Straggler handling policy.
         hash_ (str): Hash of the instance.
         name_ (str): Name of the instance.
         serializer_ (SerializerPlugin): Serializer plugin.
@@ -163,8 +164,7 @@ class Plan:
 
             if gandlf_config_path is not None:
                 Plan.logger.info(
-                    f"Importing GaNDLF Config into plan "
-                    f"from file [red]{gandlf_config_path}[/].",
+                    f"Importing GaNDLF Config into plan from file [red]{gandlf_config_path}[/].",
                     extra={"markup": True},
                 )
 
@@ -201,8 +201,7 @@ class Plan:
 
         except Exception:
             Plan.logger.exception(
-                f"Parsing Federated Learning Plan : "
-                f"[red]FAILURE[/] : [blue]{plan_config_path}[/].",
+                f"Parsing Federated Learning Plan : [red]FAILURE[/] : [blue]{plan_config_path}[/].",
                 extra={"markup": True},
             )
             raise
@@ -248,8 +247,7 @@ class Plan:
         class_name = splitext(template)[1].strip(".")
         module_path = splitext(template)[0]
         Plan.logger.info(
-            f"Importing [red]🡆[/] Object [red]{class_name}[/] "
-            f"from [red]{module_path}[/] Module.",
+            f"Importing [red]🡆[/] Object [red]{class_name}[/] from [red]{module_path}[/] Module.",
             extra={"markup": True},
         )
         module = import_module(module_path)
@@ -413,11 +411,14 @@ class Plan:
 
     def get_straggler_handling_policy(self):
         """Get straggler handling policy."""
-        template = "openfl.component.straggler_handling_functions.CutoffTimeBasedStragglerHandling"
+        template = "openfl.component.aggregator.straggler_handling.CutoffTimePolicy"
         defaults = self.config.get("straggler_handling_policy", {TEMPLATE: template, SETTINGS: {}})
 
         if self.straggler_policy_ is None:
-            self.straggler_policy_ = Plan.build(**defaults)
+            # Prepare a partial function for the straggler policy
+            self.straggler_policy_ = partial(
+                Plan.import_(defaults["template"]), **defaults["settings"]
+            )
 
         return self.straggler_policy_
 
@@ -780,3 +781,36 @@ class Plan:
             return None
         obj = serializer_plugin.restore_object(filename)
         return obj
+
+    def save_model_to_state_file(self, tensor_dict, round_number, output_path):
+        """Save model weights to a protobuf state file.
+
+        This method serializes the model weights into a protobuf format and saves
+        them to a file. The serialization is done using the tensor pipe to ensure
+        proper compression and formatting.
+
+        Args:
+            tensor_dict (dict): Dictionary containing model weights and their
+                corresponding tensors.
+            round_number (int): The current federation round number.
+            output_path (str): Path where the serialized model state will be
+                saved.
+
+        Raises:
+            Exception: If there is an error during model proto creation or saving
+                to file.
+        """
+        from openfl.protocols import utils  # Import here to avoid circular imports
+
+        # Get tensor pipe to properly serialize the weights
+        tensor_pipe = self.get_tensor_pipe()
+
+        # Create and save the protobuf message
+        try:
+            model_proto = utils.construct_model_proto(
+                tensor_dict=tensor_dict, round_number=round_number, tensor_pipe=tensor_pipe
+            )
+            utils.dump_proto(model_proto=model_proto, fpath=output_path)
+        except Exception as e:
+            self.logger.error(f"Failed to create or save model proto: {e}")
+            raise
