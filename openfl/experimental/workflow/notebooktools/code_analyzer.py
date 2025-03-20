@@ -32,7 +32,7 @@ class CodeAnalyzer:
             notebook_path (Path): Path to Jupyter notebook to be converted.
             output_path (Path): The directory where the converted Python script will be saved.
         """
-        logger.info("Converting jupyter notebook to python script...")
+        print("Converting jupyter notebook to python script...")
 
         # Extract the export filename from the notebook
         export_filename = self.__get_exp_name(notebook_path)
@@ -67,7 +67,7 @@ class CodeAnalyzer:
                 code = cell.source
                 match = re.search(r"#\s*\|\s*default_exp\s+(\w+)", code)
                 if match:
-                    logger.info(f"Retrieved {match.group(1)} from default_exp")
+                    print(f"Retrieved {match.group(1)} from default_exp")
                     return match.group(1)
         raise ValueError(
             "The notebook does not contain a '#| default_exp <experiment_name' marker."
@@ -378,143 +378,3 @@ class CodeAnalyzer:
         update_dictionary(kw_args, "kwargs")
 
         return flow_config
-
-    def fetch_flow_runtime_info(self, flow_class_name: str) -> Tuple[object, str]:
-        """Fetch the federated flow class, its runtime information and flow instance name
-        Args:
-            flow_class_name (str): The name of the federated flow class.
-
-        Returns:
-            tuple: A tuple containing the runtime instance and the flow instance name.
-        """
-        if not hasattr(self, "exported_script_module"):
-            self.__import_generated_script()
-
-        federated_flow_class = getattr(self.exported_script_module, flow_class_name)
-        flow_instance_name, runtime = self._find_flow_instance_runtime(federated_flow_class)
-        return runtime, flow_instance_name
-
-    def _find_flow_instance_runtime(self, federated_flow_class) -> Tuple[str, object]:
-        """Find runtime instance
-        Args:
-            federated_flow_class: The class object of the federated flow.
-
-        Returns:
-            tuple: A tuple containing the name of the flow instance and the runtime.
-        """
-        for t in self.available_modules_in_exported_script:
-            tempstring = t
-            t = getattr(self.exported_script_module, t)
-            if isinstance(t, federated_flow_class):
-                flow_instance_name = tempstring
-                if not hasattr(t, "_runtime"):
-                    raise AttributeError("Unable to locate LocalRuntime instantiation")
-                runtime = t._runtime
-                if not hasattr(runtime, "collaborators"):
-                    raise AttributeError("LocalRuntime instance does not have collaborators")
-                return flow_instance_name, runtime
-        raise AttributeError("Runtime instance not found")
-
-    def process_aggregator(self, runtime, data, flow_instance_name, runtime_name) -> bool:
-        """Process the aggregator details.
-        Args:
-            runtime (Any): The runtime instance containing the aggregator.
-            data (Dict[str, Any]): The data dictionary to be updated with aggregator details.
-            flow_instance_name (str): The name of the flow instance.
-            runtime_name (str): The name of the runtime.
-
-        Returns:
-            bool: A boolean indicating whether the runtime was created.
-        """
-        aggregator = runtime._aggregator
-        runtime_created = False
-        private_attrs_callable = aggregator.private_attributes_callable
-        aggregator_private_attributes = aggregator.private_attributes
-
-        if private_attrs_callable is not None:
-            data["aggregator"] = {
-                "callable_func": {
-                    "settings": {},
-                    "template": f"src.{self.script_name}.{private_attrs_callable.__name__}",
-                }
-            }
-            arguments_passed_to_initialize = self.__extract_class_initializing_args("Aggregator")[
-                "kwargs"
-            ]
-            agg_kwargs = aggregator.kwargs
-            for key, value in agg_kwargs.items():
-                if isinstance(value, (int, str, bool)):
-                    data["aggregator"]["callable_func"]["settings"][key] = value
-                else:
-                    arg = arguments_passed_to_initialize[key]
-                    value = f"src.{self.script_name}.{arg}"
-                    data["aggregator"]["callable_func"]["settings"][key] = value
-        elif aggregator_private_attributes:
-            runtime_created = True
-            with open(self.script_path, "a") as f:
-                f.write(f"\n{runtime_name} = {flow_instance_name}._runtime\n")
-                f.write(
-                    f"\naggregator_private_attributes = "
-                    f"{runtime_name}._aggregator.private_attributes\n"
-                )
-            data["aggregator"] = {
-                "private_attributes": f"src.{self.script_name}.aggregator_private_attributes"
-            }
-        return runtime_created
-
-    def process_collaborators(
-        self, runtime, data, flow_instance_name, runtime_created, runtime_name
-    ) -> Dict[str, Any]:
-        """Process the collaborators.
-        Args:
-            runtime (Any): The runtime instance containing the collaborators.
-            data (Dict[str, Any]): The data dictionary to be updated with collaborator details.
-            flow_instance_name (str): The name of the flow instance.
-            runtime_created (bool): Flag indicating if the runtime has been created.
-            runtime_name (str): The name of the runtime.
-
-        Returns:
-            Dict[str, Any]: The updated data dictionary with collaborator details.
-        """
-        collaborators = runtime._LocalRuntime__collaborators
-        arguments_passed_to_initialize = self.__extract_class_initializing_args("Collaborator")[
-            "kwargs"
-        ]
-        runtime_collab_created = False
-
-        for collab in collaborators.values():
-            collab_name = collab.get_name()
-            callable_func = collab.private_attributes_callable
-            private_attributes = collab.private_attributes
-
-            if callable_func:
-                if collab_name not in data:
-                    data[collab_name] = {"callable_func": {"settings": {}, "template": None}}
-                kw_args = runtime.get_collaborator_kwargs(collab_name)
-                for key, value in kw_args.items():
-                    if key == "private_attributes_callable":
-                        value = f"src.{self.script_name}.{value}"
-                        data[collab_name]["callable_func"]["template"] = value
-                    elif isinstance(value, (int, str, bool)):
-                        data[collab_name]["callable_func"]["settings"][key] = value
-                    else:
-                        arg = arguments_passed_to_initialize[key]
-                        value = f"src.{self.script_name}.{arg}"
-                        data[collab_name]["callable_func"]["settings"][key] = value
-            elif private_attributes:
-                with open(self.script_path, "a") as f:
-                    if not runtime_created:
-                        f.write(f"\n{runtime_name} = {flow_instance_name}._runtime\n")
-                        runtime_created = True
-                    if not runtime_collab_created:
-                        f.write(
-                            f"\nruntime_collaborators = {runtime_name}._LocalRuntime__collaborators"
-                        )
-                        runtime_collab_created = True
-                    f.write(
-                        f"\n{collab_name}_private_attributes = "
-                        f"runtime_collaborators['{collab_name}'].private_attributes"
-                    )
-                data[collab_name] = {
-                    "private_attributes": f"src.{self.script_name}.{collab_name}_private_attributes"
-                }
