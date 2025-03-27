@@ -5,24 +5,13 @@
 
 import shutil
 from importlib import import_module
-from logging import getLogger
 from pathlib import Path
 from shutil import copytree
 from typing import Any, Dict, Tuple
 
 from openfl.experimental.workflow.federated.plan import Plan
-from openfl.experimental.workflow.interface.cli.cli_helper import print_tree
+from openfl.experimental.workflow.interface.cli.cli_helper import WORKSPACE, print_tree
 from openfl.experimental.workflow.notebooktools.code_analyzer import CodeAnalyzer
-
-logger = getLogger(__name__)
-
-TEMPLATE_WORKSPACE_PATH = [
-    "openfl-workspace",
-    "experimental",
-    "workflow",
-    "FederatedRuntime",
-    "template_workspace",
-]
 
 
 class NotebookTools:
@@ -51,7 +40,6 @@ class NotebookTools:
         self.output_workspace_path = Path(output_workspace).resolve()
         self._initialize_workspace()
 
-        # Initialize CodeAnalyzer object
         self.code_analyzer = CodeAnalyzer(self.notebook_path, self.output_workspace_path)
 
     def _initialize_workspace(self) -> None:
@@ -62,13 +50,7 @@ class NotebookTools:
             shutil.rmtree(self.output_workspace_path)
         self.output_workspace_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.template_workspace_path = (
-            Path(f"{__file__}")
-            .parent.parent.parent.parent.parent.joinpath(*TEMPLATE_WORKSPACE_PATH)
-            .resolve(strict=True)
-        )
-
-        # Copy template workspace to output directory
+        self.template_workspace_path = (WORKSPACE / "template_workspace").resolve(strict=True)
         copytree(self.template_workspace_path, self.output_workspace_path)
         print(f"Copied template workspace to {self.output_workspace_path}")
 
@@ -82,10 +64,8 @@ class NotebookTools:
         """
         parent_directory = self.output_workspace_path.parent
         archive_path = parent_directory / "experiment"
-
         # Create a ZIP archive of the generated_workspace directory
         arch_path = shutil.make_archive(str(archive_path), "zip", str(self.output_workspace_path))
-
         print(f"Archive created at {archive_path}.zip")
 
         return arch_path, self.flow_class_name
@@ -95,15 +75,10 @@ class NotebookTools:
         and append to workspace/requirements.txt
         """
         try:
-            # Get requirements and related data from the code analyzer
             requirements, line_numbers, data = self.code_analyzer.get_requirements()
-
-            # Define the path for the requirements.txt file
             requirements_filepath = str(
                 self.output_workspace_path.joinpath("requirements.txt").resolve()
             )
-
-            # Write libraries found in requirements.txt
             with open(requirements_filepath, "a") as f:
                 f.writelines(requirements)
 
@@ -113,8 +88,7 @@ class NotebookTools:
             print(f"Successfully generated {requirements_filepath}")
 
         except Exception as e:
-            # Log error message with exception details
-            logger.error(f"Failed to generate requirements: {e}")
+            print(f"Failed to generate requirements: {e}")
 
     def _generate_plan_yaml(self, director_fqdn: str = None, tls: bool = False) -> None:
         """Generates workspace/plan.yaml
@@ -122,22 +96,11 @@ class NotebookTools:
             director_fqdn (str): Fully qualified domain name of the director node.
             tls (bool, optional): Whether to use TLS for the connection.
         """
-
-        # Get the flow_class details
         flow_details = self._extract_flow_details()
-
-        # Get flow_class_name
-        self.flow_class_name = flow_details["flow_class_name"]
-
-        # Get flow configuration
         flow_config = self.code_analyzer.fetch_flow_configuration(flow_details)
-
-        # Determine the path for the plan.yaml file
         plan_path = self.output_workspace_path.joinpath("plan", "plan.yaml").resolve()
-
         # Build the complete plan configuration
         data_config = self._build_plan_config(flow_config, director_fqdn, tls, plan_path)
-
         # Write the updated plan configuraiton to the plan.yaml file
         Plan.dump(plan_path, data_config)
 
@@ -158,7 +121,6 @@ class NotebookTools:
         """
         data_config = self._initialize_plan_yaml(plan_path)
         data_config["federated_flow"].update(flow_config["federated_flow"])
-
         if director_fqdn:
             network_settings = Plan.parse(plan_path).config["network"]
             data_config["network"] = network_settings
@@ -171,8 +133,8 @@ class NotebookTools:
         """Extract the flow class details"""
         flspsec = import_module("openfl.experimental.workflow.interface").FLSpec
         flow_details = self.code_analyzer.get_flow_class_details(flspsec)
-        if not flow_details:
-            raise ValueError("Failed to extract flow class details")
+        # Store flow_class_name as instance attribute for later use
+        self.flow_class_name = flow_details["flow_class_name"]
         return flow_details
 
     def _initialize_plan_yaml(self, plan_yaml: Path) -> dict:
@@ -187,6 +149,7 @@ class NotebookTools:
         if data is None:
             data = {}
             data["federated_flow"] = {"settings": {}, "template": ""}
+
         return data
 
     def export(self, director_fqdn: str, tls: bool = False) -> Tuple[str, str]:

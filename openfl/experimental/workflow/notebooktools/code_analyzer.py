@@ -6,14 +6,11 @@ import inspect
 import re
 import sys
 from importlib import import_module
-from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import nbformat
 from nbdev.export import nb_export
-
-logger = getLogger(__name__)
 
 
 class CodeAnalyzer:
@@ -33,22 +30,16 @@ class CodeAnalyzer:
             output_path (Path): The directory where the converted Python script will be saved.
         """
         print("Converting jupyter notebook to python script...")
-
         # Extract the export filename from the notebook
-        export_filename = self.__get_exp_name(notebook_path)
-
+        self.script_name = self.__get_exp_name(notebook_path)
         # Convert the notebook to a Python script and set the script path
         self.script_path = Path(
             self.__convert_to_python(
                 notebook_path,
                 output_path.joinpath("src"),
-                f"{export_filename}.py",
+                f"{self.script_name}.py",
             )
         ).resolve()
-        # Generated python script name
-        self.script_name = self.script_path.name.split(".")[0].strip()
-
-        # Commenting out flow.run() to prevent the flow from starting execution
         self.__comment_flow_execution()
 
     def __get_exp_name(self, notebook_path: Path) -> str:
@@ -110,10 +101,8 @@ class CodeAnalyzer:
             sys.path.append(str(self.script_path.parent))
             self.exported_script_module = import_module(self.script_name)
             self.available_modules_in_exported_script = dir(self.exported_script_module)
-
         except ImportError as e:
-            logger.error(f"Failed to import script {self.script_name}: {e}")
-            raise
+            raise ImportError(f"Failed to import script {self.script_name}: {e}")
 
     def __get_class_arguments(self, class_name) -> list:
         """Given the class name returns expected class arguments.
@@ -124,7 +113,6 @@ class CodeAnalyzer:
         Returns:
             list: A list of expected class arguments.
         """
-        # Import python script if not already
         if not hasattr(self, "exported_script_module"):
             self.__import_generated_script()
 
@@ -135,13 +123,10 @@ class CodeAnalyzer:
                     self.exported_script_module,
                     self.available_modules_in_exported_script[idx],
                 )
-
-        # If class not found
         if "cls" not in locals():
             raise NameError(f"{class_name} not found.")
 
         if inspect.isclass(cls):
-            # Check if the class has an __init__ method
             if "__init__" in cls.__dict__:
                 init_signature = inspect.signature(cls.__init__)
                 # Extract the parameter names (excluding 'self', 'args', and
@@ -153,7 +138,7 @@ class CodeAnalyzer:
                 ]
                 return arg_names
             return []
-        logger.error(f"{cls} is not a class")
+        print(f"{cls} is not a class")
 
     def __get_class_name(self, parent_class) -> Optional[str]:
         """Find and return the name of a class derived from the provided parent class.
@@ -163,7 +148,6 @@ class CodeAnalyzer:
         Returns:
             Optional[str]: The name of the derived class.
         """
-        # Import python script if not already
         if not hasattr(self, "exported_script_module"):
             self.__import_generated_script()
 
@@ -172,8 +156,7 @@ class CodeAnalyzer:
             t = getattr(self.exported_script_module, attr)
             if inspect.isclass(t) and t != parent_class and issubclass(t, parent_class):
                 return attr
-
-        return None
+        raise ValueError("No flow class found that inherits from FLSpec")
 
     def __extract_class_initializing_args(self, class_name) -> Dict[str, Any]:
         """Provided name of the class returns expected arguments and it's
@@ -298,13 +281,7 @@ class CodeAnalyzer:
                 init_args (Dict[str, Any]): The initialization arguments for the flow class.
         """
         flow_class_name = self.__get_class_name(parent_class)
-        if not flow_class_name:
-            raise ValueError("No flow class found that inherits from FLSpec")
-
-        # Get expected arguments
         expected_arguments = self.__get_class_arguments(flow_class_name)
-
-        # get initialization arguments
         init_args = self.__extract_class_initializing_args(flow_class_name)
 
         return {
