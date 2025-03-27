@@ -13,7 +13,7 @@ collaborator:
   settings: {}
 
 federated_flow:
-  template: src.flow.TinyImageNetFlow
+  template: {}
   settings: {}
 
 network:

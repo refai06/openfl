@@ -48,8 +48,8 @@ class CodeAnalyzer:
         # Generated python script name
         self.script_name = self.script_path.name.split(".")[0].strip()
 
-        # Transform the script
-        self.__transform_script()
+        # Commenting out flow.run() to prevent the flow from starting execution
+        self.__comment_flow_execution()
 
     def __get_exp_name(self, notebook_path: Path) -> str:
         """Extract experiment name from Jupyter notebook
@@ -59,7 +59,7 @@ class CodeAnalyzer:
         Args:
             notebook_path (str): Path to Jupyter notebook.
         """
-        with open(str(notebook_path), "r") as f:
+        with notebook_path.open("r") as f:
             notebook_content = nbformat.read(f, as_version=nbformat.NO_CONVERT)
 
         for cell in notebook_content.cells:
@@ -90,37 +90,17 @@ class CodeAnalyzer:
 
         return Path(output_path).joinpath(export_filename).resolve()
 
-    def __transform_script(self) -> None:
-        """
-        Transform the script by commenting out flow.run() and changing the runtime backend.
-        """
-        # Comment out flow.run() to prevent the flow from starting execution
-        self.__comment_flow_execution()
-
-        self.__switch_to_single_process_backend()
-
     def __comment_flow_execution(self) -> None:
         """Comment out lines containing '.run()' in the specified Python script"""
-        with open(self.script_path, "r") as f:
+        run_statement = ".run()"
+
+        with self.script_path.open("r") as f:
             data = f.readlines()
         for idx, line in enumerate(data):
-            if ".run()" in line:
+            if run_statement in line:
                 data[idx] = f"# {line}"
-        with open(self.script_path, "w") as f:
+        with self.script_path.open("w") as f:
             f.writelines(data)
-
-    def __switch_to_single_process_backend(self) -> None:
-        """Change the LocalRuntime backend from ray to single_process."""
-        with open(self.script_path, "r") as f:
-            data = f.read()
-
-        if "backend='ray'" in data or 'backend="ray"' in data:
-            data = data.replace("backend='ray'", "backend='single_process'").replace(
-                'backend="ray"', 'backend="single_process"'
-            )
-
-        with open(self.script_path, "w") as f:
-            f.write(data)
 
     def __import_generated_script(self) -> None:
         """
@@ -175,18 +155,13 @@ class CodeAnalyzer:
             return []
         logger.error(f"{cls} is not a class")
 
-    def __get_class_meta_source(
-        self, parent_class
-    ) -> Optional[Tuple[Optional[str], Optional[str]]]:
-        """Provided the parent_class name returns derived class source code and
-        name.
+    def __get_class_name(self, parent_class) -> Optional[str]:
+        """Find and return the name of a class derived from the provided parent class.
         Args:
             parent_class: FLSpec instance.
 
         Returns:
-            Optional[Tuple[Optional[str], Optional[str]]]:
-                The source code of the derived class (str).
-                The name of the derived class (str).
+            Optional[str]: The name of the derived class.
         """
         # Import python script if not already
         if not hasattr(self, "exported_script_module"):
@@ -196,9 +171,9 @@ class CodeAnalyzer:
         for attr in self.available_modules_in_exported_script:
             t = getattr(self.exported_script_module, attr)
             if inspect.isclass(t) and t != parent_class and issubclass(t, parent_class):
-                return inspect.getsource(t), attr
+                return attr
 
-        return None, None
+        return None
 
     def __extract_class_initializing_args(self, class_name) -> Dict[str, Any]:
         """Provided name of the class returns expected arguments and it's
@@ -284,7 +259,7 @@ class CodeAnalyzer:
                 data (list of str): The entire script data as a list of lines.
         """
         data = None
-        with open(self.script_path, "r") as f:
+        with self.script_path.open("r") as f:
             requirements = []
             line_nos = []
             data = f.readlines()
@@ -305,7 +280,7 @@ class CodeAnalyzer:
             data (List[str]): The entire script data as a list of lines.
             line_nos (List[int]): List of line numbers where "pip install" commands are found.
         """
-        with open(self.script_path, "w") as f:
+        with self.script_path.open("w") as f:
             for i, line in enumerate(data):
                 if i not in line_nos:
                     f.write(line)
@@ -322,7 +297,7 @@ class CodeAnalyzer:
                 expected_args (List[str]): The expected arguments for the flow class.
                 init_args (Dict[str, Any]): The initialization arguments for the flow class.
         """
-        _, flow_class_name = self.__get_class_meta_source(parent_class)
+        flow_class_name = self.__get_class_name(parent_class)
         if not flow_class_name:
             raise ValueError("No flow class found that inherits from FLSpec")
 

@@ -16,10 +16,18 @@ from openfl.experimental.workflow.notebooktools.code_analyzer import CodeAnalyze
 
 logger = getLogger(__name__)
 
+TEMPLATE_WORKSPACE_PATH = [
+    "openfl-workspace",
+    "experimental",
+    "workflow",
+    "FederatedRuntime",
+    "template_workspace",
+]
+
 
 class NotebookTools:
-    """Class to convert Jupyter notebook based on Workflow API into a
-    workspace that could be deployed on distributed infrastructure
+    """Class providing utility functions to convert Jupyter notebook based on Workflow API
+    into a workspace enabling its deployment on distributed infrastructure
 
     Attributes:
         notebook_path: Absolute path of jupyter notebook.
@@ -41,30 +49,28 @@ class NotebookTools:
             raise FileNotFoundError(f"The Jupyter notebook at {notebook_path} does not exist.")
 
         self.output_workspace_path = Path(output_workspace).resolve()
+        self._initialize_workspace()
+
+        # Initialize CodeAnalyzer object
+        self.code_analyzer = CodeAnalyzer(self.notebook_path, self.output_workspace_path)
+
+    def _initialize_workspace(self) -> None:
+        """Initialize the workspace by setting up path and copying templates"""
         # Regenerate the workspace if it already exists
         if self.output_workspace_path.exists():
+            print(f"Removing existing workspace: {self.output_workspace_path}")
             shutil.rmtree(self.output_workspace_path)
         self.output_workspace_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.template_workspace_path = (
             Path(f"{__file__}")
-            .parent.parent.parent.parent.parent.joinpath(
-                "openfl-workspace",
-                "experimental",
-                "workflow",
-                "AggregatorBasedWorkflow",
-                "template_workspace",
-            )
+            .parent.parent.parent.parent.parent.joinpath(*TEMPLATE_WORKSPACE_PATH)
             .resolve(strict=True)
         )
 
         # Copy template workspace to output directory
         copytree(self.template_workspace_path, self.output_workspace_path)
-
         print(f"Copied template workspace to {self.output_workspace_path}")
-
-        # Initialize CodeAnalyzer object
-        self.code_analyzer = CodeAnalyzer(self.notebook_path, self.output_workspace_path)
 
     def _generate_experiment_archive(self) -> Tuple[str, str]:
         """
@@ -85,8 +91,8 @@ class NotebookTools:
         return arch_path, self.flow_class_name
 
     def _generate_requirements(self) -> None:
-        """Extracts pip libraries from exported python script
-        and append in workspace/requirements.txt
+        """Extract dependencies (pip install <module name>) from exported python script
+        and append to workspace/requirements.txt
         """
         try:
             # Get requirements and related data from the code analyzer
@@ -111,7 +117,7 @@ class NotebookTools:
             logger.error(f"Failed to generate requirements: {e}")
 
     def _generate_plan_yaml(self, director_fqdn: str = None, tls: bool = False) -> None:
-        """Generate the plan.yaml
+        """Generates workspace/plan.yaml
         Args:
             director_fqdn (str): Fully qualified domain name of the director node.
             tls (bool, optional): Whether to use TLS for the connection.
