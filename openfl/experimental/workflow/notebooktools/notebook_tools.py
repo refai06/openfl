@@ -133,8 +133,9 @@ class NotebookTools:
         """Extract the flow class details"""
         flspsec = import_module("openfl.experimental.workflow.interface").FLSpec
         flow_details = self.code_analyzer.get_flow_class_details(flspsec)
-        # Store flow_class_name as instance attribute for later use
+        # Set flow_class_name for future reference
         self.flow_class_name = flow_details["flow_class_name"]
+
         return flow_details
 
     def _initialize_plan_yaml(self, plan_yaml: Path) -> dict:
