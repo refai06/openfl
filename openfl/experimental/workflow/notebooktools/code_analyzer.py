@@ -4,6 +4,7 @@
 import ast
 import inspect
 import re
+import shutil
 import sys
 from importlib import import_module
 from pathlib import Path
@@ -45,6 +46,8 @@ class CodeAnalyzer:
             )
         ).resolve()
         self.requirements = self._get_requirements()
+        user_imports = self.__extract_user_defined_imports(notebook_path)
+        self.__copy_user_defined_modules(user_imports, notebook_path)
         self.__modify_experiment_script()
 
     def __get_exp_name(self, notebook_path: Path) -> str:
@@ -85,6 +88,70 @@ class CodeAnalyzer:
         nb_export(notebook_path, output_path)
 
         return Path(output_path).joinpath(export_filename).resolve()
+
+    def __extract_user_defined_imports(self, notebook_path) -> List[str]:
+        """
+        Extract user-defined imports, excluding inbuild and third-party module
+
+        Args:
+            notebook_path: Path to Jupyter notebook.
+
+        """
+        with open(self.script_path, "r") as file:
+            code = "".join(line for line in file if not line.lstrip().startswith(("!", "%")))
+
+        tree = ast.parse(code)
+        user_imports = set()
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module_name = alias.name.split(".")[0]
+                    if self._is_user_defined_module(module_name, notebook_path):
+                        user_imports.add(module_name)
+
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                module_name = node.module.split(".")[0]
+                if self._is_user_defined_module(module_name, notebook_path):
+                    user_imports.add(module_name)
+
+        return list(user_imports)
+
+    def _is_user_defined_module(self, module_name: str, notebook_path: Path) -> bool:
+        """
+        Check if a module is user-defined
+
+        Args:
+            notebook_path: Path to Jupyter notebook.
+        """
+        notebook_dir = notebook_path.parent
+        module_path = notebook_dir / f"{module_name}.py"
+
+        module_dir = notebook_dir / module_name
+
+        if (module_path.exists() and module_path.is_file()) or module_dir.exists():
+            return True
+
+        return False
+
+    def __copy_user_defined_modules(self, module_names: List[str], notebook_path: Path) -> None:
+        """
+        Copies user-defined modules/packages to the workspace's src directory
+
+        Args:
+            module_name: List of module name to copy.
+            notebook_path: Path to Jupyter notebook.
+        """
+        src_dir = self.script_path.parent
+        for module_name in module_names:
+            module_file = notebook_path.parent / f"{module_name}.py"
+            module_dir = notebook_path.parent / module_name
+            if module_file.exists() and module_file.is_file():
+                shutil.copy(module_file, src_dir)
+                print(f"Copied used-defined module: {module_name}.py")
+            elif module_dir.exists() and module_dir.is_dir():
+                shutil.copytree(module_dir, src_dir / module_name, dirs_exist_ok=True)
+                print(f"Copied used-defined directory: {module_name}/")
 
     def __modify_experiment_script(self) -> None:
         """Modifies the given python script by commenting out following code:
