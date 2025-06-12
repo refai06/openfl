@@ -8,7 +8,7 @@ import shutil
 import sys
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import nbformat
 from nbdev.export import nb_export
@@ -117,41 +117,23 @@ class CodeAnalyzer:
 
         return list(user_imports)
 
-    def _is_user_defined_module(self, module_name: str, notebook_path: Path) -> bool:
-        """
-        Check if a module is user-defined
-
-        Args:
-            notebook_path: Path to Jupyter notebook.
-        """
-        notebook_dir = notebook_path.parent
-        module_path = notebook_dir / f"{module_name}.py"
-
-        module_dir = notebook_dir / module_name
-
-        if (module_path.exists() and module_path.is_file()) or module_dir.exists():
-            return True
-
-        return False
-
     def __copy_user_defined_modules(self, module_names: List[str], notebook_path: Path) -> None:
         """
         Copies user-defined modules/packages to the workspace's src directory
 
         Args:
-            module_name: List of module name to copy.
+            module_names: List of module names.
             notebook_path: Path to Jupyter notebook.
         """
         src_dir = self.script_path.parent
         for module_name in module_names:
-            module_file = notebook_path.parent / f"{module_name}.py"
-            module_dir = notebook_path.parent / module_name
-            if module_file.exists() and module_file.is_file():
-                shutil.copy(module_file, src_dir)
-                print(f"Copied used-defined module: {module_name}.py")
+            module_path, module_dir = self._get_module_paths(module_name, notebook_path)
+            if module_path.exists() and module_path.is_file():
+                shutil.copy(module_path, src_dir)
+                print(f"Copied user-defined module: {module_name}.py")
             elif module_dir.exists() and module_dir.is_dir():
                 shutil.copytree(module_dir, src_dir / module_name, dirs_exist_ok=True)
-                print(f"Copied used-defined directory: {module_name}/")
+                print(f"Copied user-defined directory: {module_name}/")
 
     def __modify_experiment_script(self) -> None:
         """Modifies the given python script by commenting out following code:
@@ -360,6 +342,34 @@ class CodeAnalyzer:
         if value.startswith("[") and "," not in value:
             value = value.lstrip("[").rstrip("]")
         return value
+
+    def _is_user_defined_module(self, module_name: str, notebook_path: Path) -> bool:
+        """
+        Check if a module is user-defined
+
+        Args:
+            module_name: Name of the module.
+            notebook_path: Path to Jupyter notebook.
+        """
+        if not isinstance(module_name, str) or not module_name.strip():
+            return False
+
+        module_path, module_dir = self._get_module_paths(module_name, notebook_path)
+
+        return (module_path.exists() and module_path.is_file()) or module_dir.exists()
+
+    def _get_module_paths(self, module_name: str, notebook_path: Path) -> Tuple:
+        """
+        Get the file and directory paths for a user-defined module
+
+        Args:
+            module_name: Name of the module.
+            notebook_path: Path to the Jupyter notebook.
+        """
+        notebook_dir = notebook_path.parent
+        module_path = notebook_dir / f"{module_name}.py"
+        module_dir = notebook_dir / module_name
+        return module_path, module_dir
 
     def _get_requirements(self) -> List[str]:
         """Extract pip libraries from the script
