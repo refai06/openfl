@@ -89,13 +89,16 @@ class CodeAnalyzer:
 
         return Path(output_path).joinpath(export_filename).resolve()
 
-    def __extract_user_defined_imports(self, notebook_path) -> List[str]:
+    def __extract_user_defined_imports(self, notebook_path: Path) -> List[str]:
         """
-        Extract user-defined imports, excluding inbuild and third-party module
+        Extract user-defined module imports from the notebook script,
+        excluding standard library and third-party modules.
 
         Args:
-            notebook_path: Path to Jupyter notebook.
-
+            notebook_path (Path): Path to the Jupyter notebook.
+        
+        Returns:
+            List[str]: A list of user-defined module names used in the notebook.
         """
         with open(self.script_path, "r") as file:
             code = "".join(line for line in file if not line.lstrip().startswith(("!", "%")))
@@ -119,21 +122,24 @@ class CodeAnalyzer:
 
     def __copy_user_defined_modules(self, module_names: List[str], notebook_path: Path) -> None:
         """
-        Copies user-defined modules/packages to the workspace's src directory
+        Copies user-defined modules/packages to the generated workspace's src directory
 
         Args:
-            module_names: List of module names.
-            notebook_path: Path to Jupyter notebook.
+            module_names (List[str]): A list of user-defined module names
+            notebook_path (Path): Path to Jupyter notebook.
         """
         src_dir = self.script_path.parent
         for module_name in module_names:
-            module_path, module_dir = self._get_module_paths(module_name, notebook_path)
-            if module_path.exists() and module_path.is_file():
-                shutil.copy(module_path, src_dir)
-                print(f"Copied user-defined module: {module_name}.py")
-            elif module_dir.exists() and module_dir.is_dir():
-                shutil.copytree(module_dir, src_dir / module_name, dirs_exist_ok=True)
-                print(f"Copied user-defined directory: {module_name}/")
+            try:
+                module_path, module_dir = self._get_module_paths(module_name, notebook_path)
+                if module_path.exists() and module_path.is_file():
+                    shutil.copy(module_path, src_dir)
+                    print(f"Copied user-defined module: {module_name}.py")
+                elif module_dir.exists() and module_dir.is_dir():
+                    shutil.copytree(module_dir, src_dir / module_name, dirs_exist_ok=True)
+                    print(f"Copied user-defined directory: {module_name}/")
+            except Exception as e:
+                print(f"[WARNING] Failed to copy '{module_name}':{e}")
 
     def __modify_experiment_script(self) -> None:
         """Modifies the given python script by commenting out following code:
@@ -345,26 +351,34 @@ class CodeAnalyzer:
 
     def _is_user_defined_module(self, module_name: str, notebook_path: Path) -> bool:
         """
-        Check if a module is user-defined
+        Determine whether a given module is user-defined.
 
         Args:
-            module_name: Name of the module.
-            notebook_path: Path to Jupyter notebook.
+            module_name (str): Name of the module.
+            notebook_path (Path): Path to Jupyter notebook using the module.
+
+        Return:
+            bool: True if the module is user-defined, False otherwise.
         """
+        # Reject empty or non-string module names
         if not isinstance(module_name, str) or not module_name.strip():
             return False
 
+        # Expected file path or directory path of the module
         module_path, module_dir = self._get_module_paths(module_name, notebook_path)
 
         return (module_path.exists() and module_path.is_file()) or module_dir.exists()
 
-    def _get_module_paths(self, module_name: str, notebook_path: Path) -> Tuple:
+    def _get_module_paths(self, module_name: str, notebook_path: Path) -> Tuple[Path, Path]:
         """
         Get the file and directory paths for a user-defined module
 
         Args:
-            module_name: Name of the module.
-            notebook_path: Path to the Jupyter notebook.
+            module_name (str): Name of the module.
+            notebook_path (Path): Path to the Jupyter notebook.
+            
+        Returns:
+            Tuple[Path, Path]: (module_file_path, module_directory_path)
         """
         notebook_dir = notebook_path.parent
         module_path = notebook_dir / f"{module_name}.py"
